@@ -6,6 +6,11 @@ if [ "$EUID" -ne 0 ]; then
   exit 1
 fi
 
+
+read -p "Enter usernames separated by spaces: " -a my_array
+echo "You entered: ${my_array[@]}"
+
+
 # Upgrading the system
 echo "[+] Updating & Upgrading the system"
 apt update && apt upgrade -y
@@ -13,6 +18,11 @@ apt update && apt upgrade -y
 # Install fish
 echo "[+] Installing fish shell"
 apt install fish -y
-chsh -s $(which fish) $USER
+
+# Changing Shell for each user
+for i in "${my_array[@]}"; do
+    echo "Changing shell for $i"
+    chsh -s $(which fish) $i
+done
 chsh -s $(which fish)
 

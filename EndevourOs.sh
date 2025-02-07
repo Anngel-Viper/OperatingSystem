@@ -8,6 +8,10 @@ fi
 
 echo "[+] This script is running as root"
 
+# Getting all the usernames
+read -p "Enter usernames separated by spaces: " -a my_array
+echo "You entered: ${my_array[@]}"
+
 # Update the system
 echo "[+] Updating & Upgrading the system"
 pacman -Syu --noconfirm
@@ -24,13 +28,35 @@ pacman -S paru --noconfirm
 echo "[+] Installing fish shell"
 pacman -S fish --noconfirm
 chsh -s $(which fish)
-chsh -s $(which fish) $USER
+
+# Changing Shell for each user
+for i in "${my_array[@]}"; do
+    echo "Changing shell for $i"
+    chsh -s $(which fish) $i
+done
+
 pacman -S starship --noconfirm
 echo "starship init fish | source " >> ~/.config/fish/config.fish
 
-# # Installing Virtualbox 
-# echo "[+] Installing Virtualbox"
-# pacman -S virtualbox virtualbox-host-modules-lts linux-lts-headers
-# modprobe vboxdrv
-# usermod -aG vboxusers $USER
 
+# Installing VSCode
+curl https://code.visualstudio.com/sha/download?build=stable&os=linux-x64 --output vscode.tar.gz
+tar -xvf vscode.tar.gz
+mv VSCode-linux-x64 /opt/
+ln -s /opt/VSCode-linux-x64/code /usr/bin/code
+ln -s /opt/VSCode-linux-x64/code /usr/bin/vscode
+rm vscode.tar.gz
+echo "[Desktop Entry]
+Name=Visual Studio Code
+Comment=Code Editing. Redefined.
+Exec=/opt/VSCode-linux-x64/bin/code --no-sandbox %F
+Icon=/opt/VSCode-linux-x64/resources/app/resources/linux/code.png
+Terminal=false
+Type=Application
+Categories=Development;IDE;
+StartupNotify=true
+MimeType=text/plain;
+" >> /usr/share/applications/vscode.desktop
+
+chmod +x /usr/share/applications/vscode.desktop
+update-desktop-database ~/.local/share/applications/
