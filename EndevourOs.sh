@@ -60,3 +60,11 @@ MimeType=text/plain;
 
 chmod +x /usr/share/applications/vscode.desktop
 update-desktop-database ~/.local/share/applications/
+
+
+# Install Black Arch
+curl -o ~/Downloads/strap.sh https://blackarch.org/strap.sh
+chmod +x ~/Downloads/strap.sh
+sh strap.sh
+
+
