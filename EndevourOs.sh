@@ -36,8 +36,16 @@ for i in "${my_array[@]}"; do
 done
 
 pacman -S starship --noconfirm
+mkdir -p ~/.config/fish
 echo "starship init fish | source " >> ~/.config/fish/config.fish
 
+# Making Adjustment for other users as well
+for i in "${my_array[@]}"; do
+    user_home=$(eval echo ~$i)  # Get the user's home directory
+    mkdir -p "$user_home/.config/fish"
+    echo "starship init fish | source" >> "$user_home/.config/fish/config.fish"
+    chown -R $i:$i "$user_home/.config/fish"  # Ensure correct ownership
+done
 
 # Installing VSCode
 curl https://code.visualstudio.com/sha/download?build=stable&os=linux-x64 --output vscode.tar.gz
@@ -67,4 +75,31 @@ curl -o ~/Downloads/strap.sh https://blackarch.org/strap.sh
 chmod +x ~/Downloads/strap.sh
 sh strap.sh
 
+# Install Virtualbox
+pacman -S virtualbox virtualbox-host-dkms linux-lts-headers
+modprobe vboxdrv     # Main VirtualBox module
+modprobe vboxnetadp   # Host network adapter
+modprobe vboxnetflt   # NAT network driver
 
+echo "vboxdrv" | tee -a /etc/modules-load.d/virtualbox.conf
+echo "vboxnetadp" | tee -a /etc/modules-load.d/virtualbox.conf
+echo "vboxnetflt" | tee -a /etc/modules-load.d/virtualbox.conf
+
+for i in "${my_array[@]}"; do
+    usermod -aG vboxusers $i
+done
+vboxreload
+modprobe vboxdrv && systemctl restart systemd-modules-load.service
+
+
+systemctl enable vboxservice --now
+
+# Ask user if they want to reboot
+read -p "Reboot now to apply changes? (y/n): " choice
+case "$choice" in 
+  y|Y ) echo "Rebooting..."; sudo reboot;;
+  n|N ) echo "Reboot skipped. Please restart manually to apply changes.";;
+  * ) echo "Invalid choice. Reboot skipped.";;
+esac
+
+echo "Installation complete!"

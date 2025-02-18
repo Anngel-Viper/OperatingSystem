@@ -21,6 +21,6 @@ apt upgrade
 sudo apt install powershell -y
 
 # Installing VSCode for ParrotOS
-curl https://code.visualstudio.com/sha/download?build=stable&os=linux-deb-x64 --output vscode.deb
+curl -L "https://code.visualstudio.com/sha/download?build=stable&os=linux-deb-x64" --output vscode.deb
 dpkg -i vscode.deb
 rm vscode.deb
