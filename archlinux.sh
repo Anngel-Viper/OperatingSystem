@@ -62,8 +62,14 @@ sed -i 's/^# %wheel ALL=(ALL:ALL) ALL/%wheel ALL=(ALL:ALL) ALL/' /etc/sudoers
 
 EOF
 
-# Unmount and reboot
-umount -R /mnt
+# Ensure all file system changes are written
+sync
+
+# Unmount all partitions
+umount -l /mnt/boot/efi
+umount -l /mnt
+
+# Reboot
 echo "Installation complete. Rebooting..."
 sleep 2
 reboot
