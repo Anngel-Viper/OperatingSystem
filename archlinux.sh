@@ -1,75 +1,99 @@
 #!/bin/bash
-
 set -e
 
-# Variables
-disk="/dev/sda"
-hostname="anngel"
-username="anngel"
-password="anngel"  # Change this after installation
+# Configuration
+HOSTNAME="anngel"
+USERNAME="anngel"
+PASSWORD="anngel"
+DISK="/dev/sda"
+TIMEZONE="UTC"
+LOCALE="en_US.UTF-8"
+
+# Verify root
+if [ "$(id -u)" -ne 0 ]; then
+    echo "This script must be run as root!"
+    exit 1
+fi
 
 # Partitioning
-parted -s "$disk" mklabel gpt
-parted -s "$disk" mkpart ESP fat32 1MiB 512MiB
-parted -s "$disk" set 1 esp on
-parted -s "$disk" mkpart primary ext4 512MiB 100%
+echo "Partitioning disk..."
+parted -s "$DISK" mklabel gpt
+parted -s "$DISK" mkpart "EFI" fat32 1MiB 513MiB
+parted -s "$DISK" set 1 esp on
+parted -s "$DISK" mkpart "root" ext4 513MiB 100%
 
-# Formatting and mounting
-mkfs.fat -F32 "${disk}1"
-mkfs.ext4 "${disk}2"
-mount "${disk}2" /mnt
-mkdir -p /mnt/boot/efi
-mount "${disk}1" /mnt/boot/efi
+# Formatting
+echo "Formatting partitions..."
+mkfs.fat -F32 "${DISK}1"
+mkfs.ext4 -F "${DISK}2"
 
-# Install base system
-pacstrap /mnt base linux linux-firmware neovim git
+# Mounting
+echo "Mounting filesystems..."
+mount "${DISK}2" /mnt
+mkdir -p /mnt/boot
+mount "${DISK}1" /mnt/boot
+
+# Base system installation
+echo "Installing base system..."
+pacman -Sy --noconfirm archlinux-keyring
+pacstrap /mnt base linux linux-firmware \
+    grub efibootmgr sudo networkmanager \
+    virtualbox-guest-utils nano
 
 # Generate fstab
+echo "Generating fstab..."
 genfstab -U /mnt >> /mnt/etc/fstab
 
-# Chroot and configure
+# Chroot setup
 arch-chroot /mnt /bin/bash <<EOF
+set -e
 
-# Timezone and localization
-ln -sf /usr/share/zoneinfo/Asia/Kolkata /etc/localtime
+# Time configuration
+ln -sf /usr/share/zoneinfo/$TIMEZONE /etc/localtime
 hwclock --systohc
-echo "en_US.UTF-8 UTF-8" > /etc/locale.gen
-locale-gen
-echo "LANG=en_US.UTF-8" > /etc/locale.conf
-echo "$hostname" > /etc/hostname
 
-# Hosts file
-cat <<EOT > /etc/hosts
+# Localization
+echo "LANG=$LOCALE" > /etc/locale.conf
+sed -i "s/#$LOCALE/$LOCALE/" /etc/locale.gen
+locale-gen
+
+# Network configuration
+echo "$HOSTNAME" > /etc/hostname
+cat > /etc/hosts <<HOSTS
 127.0.0.1   localhost
 ::1         localhost
-127.0.1.1   $hostname.localdomain $hostname
-EOT
+127.0.1.1   $HOSTNAME.localdomain $HOSTNAME
+HOSTS
 
-# Install essential packages
-pacman -Sy --noconfirm grub efibootmgr networkmanager sudo
+# User setup
+echo "Setting up user..."
+useradd -m -G wheel -s /bin/bash "$USERNAME"
+echo "$USERNAME:$PASSWORD" | chpasswd
+echo "root:$PASSWORD" | chpasswd
 
-# Install GRUB
-grub-install --target=x86_64-efi --efi-directory=/boot/efi --bootloader-id=GRUB
+# Sudo configuration
+echo "Configuring sudo..."
+sed -i 's/# %wheel ALL=(ALL:ALL) ALL/%wheel ALL=(ALL:ALL) ALL/' /etc/sudoers
+
+# Bootloader
+echo "Installing GRUB..."
+grub-install --target=x86_64-efi --efi-directory=/boot --bootloader-id=GRUB
 grub-mkconfig -o /boot/grub/grub.cfg
 
-# Enable services
+# Hyprland installation
+echo "Installing Hyprland..."
+pacman -S --noconfirm hyprland seatd xorg-xwayland waybar grim slurp wofi
+
+# Services
 systemctl enable NetworkManager
+systemctl enable vboxservice
 
-# Create user
-useradd -m -G wheel -s /bin/bash $username
-echo "$username:$password" | chpasswd
-sed -i 's/^# %wheel ALL=(ALL:ALL) ALL/%wheel ALL=(ALL:ALL) ALL/' /etc/sudoers
-
+# Cleanup
+pacman -Scc --noconfirm
 EOF
 
-# Ensure all file system changes are written
-sync
-
-# Unmount all partitions
-umount -l /mnt/boot/efi
-umount -l /mnt
-
-# Reboot
-echo "Installation complete. Rebooting..."
-sleep 2
+# Finalization
+echo "Unmounting..."
+umount -R /mnt
+echo "Installation complete! Rebooting..."
 reboot
