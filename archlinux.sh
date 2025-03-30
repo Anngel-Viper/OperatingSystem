@@ -9,6 +9,16 @@ DISK="/dev/sda"
 TIMEZONE="UTC"
 LOCALE="en_US.UTF-8"
 
+# Check UEFI/BIOS
+if [ -d /sys/firmware/efi/efivars ]; then
+    FIRMWARE="UEFI"
+    BOOT_PART="${DISK}1"
+    ROOT_PART="${DISK}2"
+else
+    FIRMWARE="BIOS"
+    ROOT_PART="${DISK}1"
+fi
+
 # Verify root
 if [ "$(id -u)" -ne 0 ]; then
     echo "This script must be run as root!"
@@ -16,29 +26,44 @@ if [ "$(id -u)" -ne 0 ]; then
 fi
 
 # Partitioning
-echo "Partitioning disk..."
-parted -s "$DISK" mklabel gpt
-parted -s "$DISK" mkpart "EFI" fat32 1MiB 513MiB
-parted -s "$DISK" set 1 esp on
-parted -s "$DISK" mkpart "root" ext4 513MiB 100%
+echo "Partitioning disk ($FIRMWARE)..."
+parted -s "$DISK" mklabel $([ "$FIRMWARE" = "UEFI" ] && echo "gpt" || echo "msdos")
+
+if [ "$FIRMWARE" = "UEFI" ]; then
+    parted -s "$DISK" mkpart "EFI" fat32 1MiB 513MiB
+    parted -s "$DISK" set 1 esp on
+    parted -s "$DISK" mkpart "root" ext4 513MiB 100%
+else
+    parted -s "$DISK" mkpart primary ext4 1MiB 100%
+    parted -s "$DISK" set 1 boot on
+fi
 
 # Formatting
 echo "Formatting partitions..."
-mkfs.fat -F32 "${DISK}1"
-mkfs.ext4 -F "${DISK}2"
+if [ "$FIRMWARE" = "UEFI" ]; then
+    mkfs.fat -F32 "$BOOT_PART"
+fi
+mkfs.ext4 -F "$ROOT_PART"
 
 # Mounting
 echo "Mounting filesystems..."
-mount "${DISK}2" /mnt
-mkdir -p /mnt/boot
-mount "${DISK}1" /mnt/boot
+mount "$ROOT_PART" /mnt
+if [ "$FIRMWARE" = "UEFI" ]; then
+    mkdir -p /mnt/boot
+    mount "$BOOT_PART" /mnt/boot
+fi
 
 # Base system installation
 echo "Installing base system..."
 pacman -Sy --noconfirm archlinux-keyring
-pacstrap /mnt base linux linux-firmware \
-    grub efibootmgr sudo networkmanager \
-    virtualbox-guest-utils nano
+BASE_PKGS="base linux linux-firmware sudo networkmanager nano virtualbox-guest-utils"
+if [ "$FIRMWARE" = "UEFI" ]; then
+    BASE_PKGS="$BASE_PKGS grub efibootmgr dosfstools"
+else
+    BASE_PKGS="$BASE_PKGS grub"
+fi
+
+pacstrap /mnt $BASE_PKGS
 
 # Generate fstab
 echo "Generating fstab..."
@@ -72,12 +97,15 @@ echo "$USERNAME:$PASSWORD" | chpasswd
 echo "root:$PASSWORD" | chpasswd
 
 # Sudo configuration
-echo "Configuring sudo..."
-sed -i 's/# %wheel ALL=(ALL:ALL) ALL/%wheel ALL=(ALL:ALL) ALL/' /etc/sudoers
+echo "%wheel ALL=(ALL:ALL) ALL" >> /etc/sudoers
 
-# Bootloader
-echo "Installing GRUB..."
-grub-install --target=x86_64-efi --efi-directory=/boot --bootloader-id=GRUB
+# Bootloader installation
+echo "Installing GRUB for $FIRMWARE..."
+if [ "$FIRMWARE" = "UEFI" ]; then
+    grub-install --target=x86_64-efi --efi-directory=/boot --bootloader-id=GRUB
+else
+    grub-install --target=i386-pc "$DISK"
+fi
 grub-mkconfig -o /boot/grub/grub.cfg
 
 # Hyprland installation
