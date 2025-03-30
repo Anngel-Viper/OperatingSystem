@@ -109,12 +109,13 @@ fi
 grub-mkconfig -o /boot/grub/grub.cfg
 
 # Hyprland installation
-echo "Installing Hyprland..."
-pacman -S --noconfirm hyprland seatd xorg-xwayland waybar grim slurp wofi
+echo "Installing Plasma..."
+pacman -S --noconfirm plasma kde-applications sddm
 
 # Services
 systemctl enable NetworkManager
 systemctl enable vboxservice
+systemctl enable sddm
 
 # Cleanup
 pacman -Scc --noconfirm
